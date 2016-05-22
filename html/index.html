@@ -1,0 +1,878 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>Welcome to Samurai’s documentation! &mdash; Samurai .0 documentation</title>
+    
+    <link rel="stylesheet" href="_static/classic.css" type="text/css" />
+    <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    './',
+        VERSION:     '.0',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="_static/jquery.js"></script>
+    <script type="text/javascript" src="_static/underscore.js"></script>
+    <script type="text/javascript" src="_static/doctools.js"></script>
+    <link rel="top" title="Samurai .0 documentation" href="#" /> 
+  </head>
+  <body role="document">
+    <div class="related" role="navigation" aria-label="related navigation">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="nav-item nav-item-0"><a href="#">Samurai .0 documentation</a> &raquo;</li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <div class="section" id="welcome-to-samurai-s-documentation">
+<h1>Welcome to Samurai&#8217;s documentation!<a class="headerlink" href="#welcome-to-samurai-s-documentation" title="Permalink to this headline">¶</a></h1>
+<p>Contents:</p>
+<div class="toctree-wrapper compound">
+<ul class="simple">
+</ul>
+</div>
+<p>:maxdepth:2</p>
+</div>
+<div class="section" id="indices-and-tables">
+<h1>Indices and tables<a class="headerlink" href="#indices-and-tables" title="Permalink to this headline">¶</a></h1>
+<ul class="simple">
+<li><a class="reference internal" href="genindex.html"><span>Index</span></a></li>
+<li><a class="reference internal" href="py-modindex.html"><span>Module Index</span></a></li>
+<li><a class="reference internal" href="search.html"><span>Search Page</span></a></li>
+</ul>
+</div>
+<div class="section" id="services">
+<h1>Services<a class="headerlink" href="#services" title="Permalink to this headline">¶</a></h1>
+<p>Purpose is to divide functionality in small blocks that are usable/testable on their own. The functionality is provided on JSON stream.</p>
+<p>There are four functionalities a service can provide:</p>
+<ul>
+<li><dl class="first docutils">
+<dt>Sources</dt>
+<dd><ul class="first last simple">
+<li>Creates requests</li>
+<li>Typical server listen socket</li>
+<li>Examples: SPDY, REST, socketIO, graftIO, ….</li>
+</ul>
+</dd>
+</dl>
+</li>
+<li><dl class="first docutils">
+<dt>Filters</dt>
+<dd><ul class="first last simple">
+<li>Filters requests</li>
+<li>Typical blocking or editing some requests</li>
+<li>Can edit returnChannel by adding a filter on the returnChannel</li>
+<li>Examples: Login, JsonValidator, Authorisation, Caching, …</li>
+</ul>
+</dd>
+</dl>
+</li>
+<li><dl class="first docutils">
+<dt>Targets</dt>
+<dd><ul class="first last simple">
+<li>Service that will not pass the same request further and will create a response on the returnChannel</li>
+<li>Gives responses to requests</li>
+<li>Can create requests to other services to be able to answer to a request</li>
+<li>Examples: Marvin, InfluxDB, PerconaDB, SPDY…</li>
+</ul>
+</dd>
+</dl>
+</li>
+<li><dl class="first docutils">
+<dt>Routers</dt>
+<dd><ul class="first last simple">
+<li>Split request channel to multiple request channels</li>
+<li>Can decide own rules to split the messages: randomize, regexp, service name, system load etc.</li>
+</ul>
+</dd>
+</dl>
+</li>
+</ul>
+<dl class="docutils">
+<dt>One microservice can handle more than 1 functionality</dt>
+<dd><ul class="first last simple">
+<li>SPDY server can be both a source and a target</li>
+<li>Validator can forward some messages as a filter, and can act as a target when an invalid message is coming in</li>
+</ul>
+</dd>
+</dl>
+<p>There is no strict seperation between the functionalities a service can provide. One service instance can do as many things as he feels responsible for. As the intention is to seperate functionality in reusable small and replaceble parts they shouldn&#8217;t. In practice one service should try to do only 1 functionality.</p>
+<div class="section" id="tachi">
+<h2>Tachi<a class="headerlink" href="#tachi" title="Permalink to this headline">¶</a></h2>
+<p>Tachi is dumb and doesn&#8217;t like any responsibility. Each functionlity should be provided in a seperate &#8216;service&#8217;.</p>
+<p>Tachi glues microservices together to form an application. The messageflow can be configured by editing the main config file and should allow the routing of messages to the services that have the answers.</p>
+<p>The configuration is describing a message flow in the form of a tree structure. There is an inital config needed for startup, but this can be changed at runtime.</p>
+<p>The routing is based only on the request messages. The responses go trough a seperate channel. The creator of the request has to provide a returnChannel. This is a stream where the requester will listen for response(s). Each component that handles the request as a filter can replace the returnChannel by adding a transform stream to edit the response before it is handled back to the requester.
+In this way the response return path is determined by the request path and no further routing configuration is needed.</p>
+<p>This messageflow and routing now happens within 1 node process. The concept keeps pretending that services are communicationg over a network even when they aren&#8217;t. When not communicating over the network a memory session is used. This makes it possible to scale to different nodes later on without changing the interfaces between components. A link to a remote machine is just a service as any other.</p>
+<p>Tachi takes the task to link the services and routers, but in a dumb way without any logic. The configuration and flow of services is configured within the configuration file from samurai and passed to Tashi. Tachi follows this metadata information to creates the application. Internally components are using the target name to address requests. This is done by using the field &#8216;service&#8217; in the top level request message. The target name will not be called directly, it will just follow the configured message flow.</p>
+<p>Note that all services can edit the output by adding a filter stream on the returnChannel. Not only the &#8216;end&#8217; service that doesn&#8217;t forward the request further can edit the response.</p>
+<ul>
+<li><dl class="first docutils">
+<dt>Terms</dt>
+<dd><ul class="first last simple">
+<li>Modulename = name as mentioned in package.json, versioning handled by NPM. Code that can create a &#8216;service&#8217;</li>
+<li>Interface = Set of JSON schemas describing a functionality set. Sometimes referred to as a &#8216;service&#8217;</li>
+<li>Instancename = Instance of module with a given name for identification. Sometimes implementing an Interface</li>
+<li>targetInstance = String that describes the instancename that will handle the dependent requests. On module level this will be the stream itself. Tachi will replace the name of the bus by the actual bus.</li>
+<li>Bus = communicationChannel that is shared between all instances that use the same targetInstance</li>
+</ul>
+</dd>
+</dl>
+</li>
+</ul>
+<p>Tachi will handle routing internally on instancenames / bus. Routers can use the busnames to handle routing at runtime. Static code should only rely on service names or other fields in the request message.</p>
+</div>
+<div class="section" id="configure-service-flow">
+<h2>Configure service flow<a class="headerlink" href="#configure-service-flow" title="Permalink to this headline">¶</a></h2>
+<p>Instances from microservices and their settings can be managed by passing a config object to Tashi. Tashi will initiate the different services and configure them.</p>
+<p>This can be initiated by Tachi on startup. During runtime all services can be reconfigured / paused / stopped by sending messages to Tachi.</p>
+<p>Tachi supports the following actions: configure - pause - stop - listBusTree</p>
+<dl class="docutils">
+<dt>The chain or tree should be kept as easy and parallell as possible. Try to keep most of the service workers parallel after 1 router. This can be done by using 1 main &#8216;router&#8217; that will handle the most common requests types. For example these router can handle messages that promise that they will</dt>
+<dd><ul class="first last simple">
+<li>Plain JSON</li>
+<li>Authorized, having enough permissions to make that request</li>
+<li>Validated</li>
+<li>...</li>
+</ul>
+</dd>
+</dl>
+</div>
+<div class="section" id="client-side-api">
+<h2>Client side API<a class="headerlink" href="#client-side-api" title="Permalink to this headline">¶</a></h2>
+<p>Todo: refactor text
+The customer facing API should expose 1 single service. This service will be a routing hub that resolves requests by passing them to other microservices. This is done to not bother the client with the actual service that is implementing the action in the request. In this way the server components can be reorganised without changing the client API.</p>
+</div>
+<div class="section" id="microservice-interface">
+<h2>Microservice interface<a class="headerlink" href="#microservice-interface" title="Permalink to this headline">¶</a></h2>
+<p>Each microservice should provide a JSON schema that is needed to setup the service and provide it on the &#8216;configSchema&#8217; property. If no config is needed the configSchema property is not needed.</p>
+<p>Each microservice should provide a &#8216;create&#8217; function that takes the specified config as parameter. The microservice can pretend that the config is valid an has all required fields. Fields that supply a default value will contain the default value when no specific value was requested by the creator.
+The return value should be Promise that indicates the error if the creation of the service failed. If the creation has succeeded the promise should be accepted with an object representing the service. This object can contain a &#8216;stop&#8217; function to provide cleanup routines. If the instance provides a &#8216;stop&#8217; function it should return a Promise that indicates when the service is done with cleaning up the resources.</p>
+<p>The instance can provide the input request stream on the property &#8216;input&#8217; if the service can handle requests.</p>
+<p>The instance can provide the output request streams on the property &#8216;output&#8217;. This can be a single stream or an array of streams.</p>
+<p>If the service provides an Interface it should document it by providing the matching JSON schemas. If the service depends on a Interface further in the tree it should forward the &#8216;listActions&#8217; and &#8216;getJsonSchema&#8217; actions. If the service edits the Interface from a service further in the three it should edit the schemas accordingly.</p>
+<ul>
+<li><dl class="first docutils">
+<dt>List of supported action names and the corresponding JSON templates that describe the payload of these messages. There should be a schema for both the request and the answer.</dt>
+<dd><ul class="first last simple">
+<li>{ action: &#8216;listActions&#8217; }, retreive a list of actions the service supports</li>
+<li>{ action: &#8216;getJsonSchema&#8217;, payload: { action: &#8216;LookupUser&#8217;} }, retreive the schema that defines the request interface for a specific action. This can indicate default values, and should indicate what options are mandatory. This will return a schema for both the request and the expected answer.</li>
+</ul>
+</dd>
+</dl>
+</li>
+<li><dl class="first docutils">
+<dt>Each microservice should support gulp and implement at least these functionalities:</dt>
+<dd><ul class="first simple">
+<li>Eslint / Jshint</li>
+<li>Mocha</li>
+<li>Nodemon, running the main entry point and watching files. Supports debugging and auto restart.</li>
+<li>Optional: tasks specific to the microservice</li>
+</ul>
+<p class="last">The package samura-build-utils has shared code to share gulp task configurations.</p>
+</dd>
+</dl>
+</li>
+</ul>
+</div>
+<div class="section" id="filter-services">
+<h2>Filter services<a class="headerlink" href="#filter-services" title="Permalink to this headline">¶</a></h2>
+<p>Filter services can help a lot in offloading responsibility from services. In this way the functionality can be reused by different service without making it mandatory.</p>
+<p>There are some utility stream helpers that are strongly suggested to use on any microservice. In development and testing environments or for specific use cases these utility functions can be left out of the message chain.</p>
+<dl class="docutils">
+<dt>For all services:</dt>
+<dd><ul class="first last">
+<li><dl class="first docutils">
+<dt>Validation service</dt>
+<dd><ul class="first last simple">
+<li>Will only pass the validated request further in the chain. Will reject other requests and answer on the returnChannel with the validation error.</li>
+</ul>
+</dd>
+</dl>
+</li>
+</ul>
+</dd>
+<dt>For services that are generating client request:</dt>
+<dd><ul class="first last">
+<li><dl class="first docutils">
+<dt>Authorisation service</dt>
+<dd><ul class="first last simple">
+<li>Add user information to the request</li>
+</ul>
+</dd>
+</dl>
+</li>
+<li><dl class="first docutils">
+<dt>Translation service</dt>
+<dd><ul class="first last simple">
+<li>Translate text that is meant to serve to the user</li>
+</ul>
+</dd>
+</dl>
+</li>
+</ul>
+</dd>
+</dl>
+</div>
+</div>
+<div class="section" id="directory-structure">
+<h1>Directory structure<a class="headerlink" href="#directory-structure" title="Permalink to this headline">¶</a></h1>
+<dl class="docutils">
+<dt>Samurai top level</dt>
+<dd><ul class="first last">
+<li><dl class="first docutils">
+<dt>docs</dt>
+<dd><p class="first last">sphinx documentation that applies to all packages and javascript coding for Amplidata</p>
+</dd>
+</dl>
+</li>
+<li><dl class="first docutils">
+<dt>environment</dt>
+<dd><p class="first last">development and runtime dependencies install scripts</p>
+</dd>
+</dl>
+</li>
+<li><dl class="first docutils">
+<dt>gulp</dt>
+<dd><p class="first last">tasks to execute on all packages at once</p>
+</dd>
+</dl>
+</li>
+<li><dl class="first docutils">
+<dt>modules</dt>
+<dd><p class="first">the actual source packages
+* docs</p>
+<blockquote>
+<div><p>Non trivial packages should have their own sphinx docs</p>
+</div></blockquote>
+<ul class="last">
+<li><dl class="first docutils">
+<dt>gulp</dt>
+<dd><p class="first last">local gulp tasks</p>
+</dd>
+</dl>
+</li>
+<li><dl class="first docutils">
+<dt>packaging</dt>
+<dd><p class="first last">only for npm packages that become a .deb package for deployment</p>
+</dd>
+</dl>
+</li>
+<li><dl class="first docutils">
+<dt>Extra directories</dt>
+<dd><p class="first last">As needed for the specific component</p>
+</dd>
+</dl>
+</li>
+</ul>
+</dd>
+</dl>
+</li>
+</ul>
+</dd>
+</dl>
+</div>
+<div class="section" id="installation">
+<h1>Installation<a class="headerlink" href="#installation" title="Permalink to this headline">¶</a></h1>
+<p>First install the dependencies by running</p>
+<div class="highlight-bash"><div class="highlight"><pre>./environment/install.sh
+</pre></div>
+</div>
+<p>For development</p>
+<p>The samurai top level script supports the folowing arguments:</p>
+<ul>
+<li><dl class="first docutils">
+<dt>dev</dt>
+<dd><p class="first last">Install all dependencies for development environment (linked local modules)
+Alias for init + npm uninstall + npm link + npm install</p>
+</dd>
+</dl>
+</li>
+<li><dl class="first docutils">
+<dt>jenkins</dt>
+<dd><p class="first last">reinstall dependencies, run linting, tests and create a build.</p>
+</dd>
+</dl>
+</li>
+</ul>
+<p>Gulp commands can be run from this script directly:
+* [gulpCommand]</p>
+<blockquote>
+<div>Run global gulp command
+jshint - node:dev - node:prod - build - ...
+see gulp tasks section below for all available tasks</div></blockquote>
+<ul>
+<li><dl class="first docutils">
+<dt>modules/[modulename] [gulpCommand]</dt>
+<dd><p class="first last">Same result as cd modules/[modulename] gulp [gulpCommand]
+see gulp tasks section below for all available tasks</p>
+</dd>
+</dl>
+</li>
+</ul>
+<p>Samurai top level script support also folowing arguments. All these tasks can be executed by using a group/alias command from above. To speed up things if you now what is needed you can call a subtask directly.
+* init</p>
+<blockquote>
+<div>Install dependencies for top level gulp commands</div></blockquote>
+<ul>
+<li><dl class="first docutils">
+<dt>npm link</dt>
+<dd><p class="first last">Resolve all local dependencies with symbolic links.  This is the recommended way for developing. In this way all &#8216;latest&#8217; and local sources are used instead of of the fixed version that is provided in the package.json file</p>
+</dd>
+</dl>
+</li>
+<li><dl class="first docutils">
+<dt>npm install</dt>
+<dd><p class="first last">Run npm install in all modules</p>
+</dd>
+</dl>
+</li>
+<li><dl class="first docutils">
+<dt>npm uninstall</dt>
+<dd><p class="first last">Undo npm install, remove node_modules folders in all modules</p>
+</dd>
+</dl>
+</li>
+<li><dl class="first docutils">
+<dt>npm dev</dt>
+<dd><p class="first last">Alias for npm shrinkwrapfix + npm uninstall + npm link + npm install in one run</p>
+</dd>
+</dl>
+</li>
+<li><dl class="first docutils">
+<dt>npm shrinkwrapfix</dt>
+<dd><p class="first last">Remove inconsistent shrinkwrap data <a class="reference external" href="https://github.com/npm/npm/issues/3581">https://github.com/npm/npm/issues/3581</a></p>
+</dd>
+</dl>
+</li>
+</ul>
+</div>
+<div class="section" id="gulp-tasks">
+<h1>Gulp tasks<a class="headerlink" href="#gulp-tasks" title="Permalink to this headline">¶</a></h1>
+<ul>
+<li><dl class="first docutils">
+<dt>test</dt>
+<dd><ul class="first last simple">
+<li>Run the tests and generate reports in a single run. Process return code should indicate success or failure. This starts karma and mocha tests. There is no external command needed, karma is starting subset server to serve the client side javascript.</li>
+</ul>
+</dd>
+</dl>
+</li>
+<li><dl class="first docutils">
+<dt>test:watch</dt>
+<dd><ul class="first last simple">
+<li>continous run all automatic code checks on each file change. Leave process running on failures. This starts karma and mocha tests. There should be a server running serving the client app on port 3001.</li>
+</ul>
+</dd>
+</dl>
+</li>
+<li><dl class="first docutils">
+<dt>lint</dt>
+<dd><ul class="first last simple">
+<li>Run the linting tools eslint and jshint in single run. Process return code should indicate success or failure.</li>
+</ul>
+</dd>
+</dl>
+</li>
+<li><dl class="first docutils">
+<dt>lint:watch</dt>
+<dd><ul class="first last simple">
+<li>continous run all code linting on each file change. Leave process running on failures.</li>
+</ul>
+</dd>
+</dl>
+</li>
+<li><dl class="first docutils">
+<dt>build</dt>
+<dd><ul class="first last simple">
+<li>lint and test the source and if tests are successfull build a dist build. Process return code should indicate success or failure.</li>
+</ul>
+</dd>
+</dl>
+</li>
+<li><dl class="first docutils">
+<dt>serve</dt>
+<dd><ul class="first last simple">
+<li>run a development server with autoreload and run the tests on each file change. Serve the client application directly from source. This also starts the dist server on another port.</li>
+</ul>
+</dd>
+</dl>
+</li>
+<li><dl class="first docutils">
+<dt>serve:dist</dt>
+<dd><ul class="first last simple">
+<li>run a auto restarting server in production mode and serving the client application from builded output. This doesn&#8217;t start the development server.</li>
+</ul>
+</dd>
+</dl>
+</li>
+</ul>
+<dl class="docutils">
+<dt>Subtasks</dt>
+<dd><ul class="first last">
+<li><p class="first">jshint</p>
+</li>
+<li><p class="first">jshint:watch</p>
+</li>
+<li><p class="first">eslint</p>
+</li>
+<li><p class="first">eslint:watch</p>
+</li>
+<li><p class="first">webpack</p>
+</li>
+<li><p class="first">node:dev</p>
+</li>
+<li><p class="first">node:prod</p>
+</li>
+<li><p class="first">karma</p>
+</li>
+<li><dl class="first docutils">
+<dt>karma:watch</dt>
+<dd><p class="first last">note: node:dev should be running to serve the js files.</p>
+</dd>
+</dl>
+</li>
+<li><p class="first">istanbul</p>
+</li>
+<li><p class="first">istanbul:watch</p>
+</li>
+</ul>
+</dd>
+</dl>
+</div>
+<div class="section" id="packages">
+<h1>Packages<a class="headerlink" href="#packages" title="Permalink to this headline">¶</a></h1>
+<dl class="docutils">
+<dt>Purpose is to divide the code in different node packages.</dt>
+<dd><ul class="first last simple">
+<li>To make sure dependencies are managed for each microservice independently</li>
+<li>Makes it possible to replace services and move components to different repositories when needed</li>
+<li>Being sure components can live on their own for deployment and testing</li>
+<li>It forces the developers to to think about dependencies between internal components</li>
+<li>Possible to manage the subcomponents and microservices on a local npm repository (also for components that live in the same git repository)</li>
+</ul>
+</dd>
+</dl>
+<div class="section" id="naming-conventions">
+<h2>Naming conventions<a class="headerlink" href="#naming-conventions" title="Permalink to this headline">¶</a></h2>
+<p>Package names indicate the scope and intended usage.</p>
+<blockquote>
+<div><ul>
+<li><p class="first">samurai- prefix indicates that the code is usable for both tachi and tsuka. This can be for development puproses (ex. gulp helpers) or runtime (ex. logic and data structures, graft pipes, …)</p>
+</li>
+<li><dl class="first docutils">
+<dt>tachi- prefix indicates that the code is specific to the server side</dt>
+<dd><p class="first last">If the package implements the service interface ‘tachi-service-’ should be used as prefix.</p>
+</dd>
+</dl>
+</li>
+<li><p class="first">tsuka- prefix indicates that the code is specific to the client side</p>
+</li>
+</ul>
+</div></blockquote>
+</div>
+<div class="section" id="package-list-and-responsibilities">
+<h2>Package list and responsibilities<a class="headerlink" href="#package-list-and-responsibilities" title="Permalink to this headline">¶</a></h2>
+<div class="section" id="samurai">
+<h3>samurai<a class="headerlink" href="#samurai" title="Permalink to this headline">¶</a></h3>
+<ul class="simple">
+<li>Main command line application</li>
+<li>Has Tsuka and Tashi as package.json dependencies</li>
+<li>Has microservices code as dependency in package.json</li>
+<li>Has a config file service.json to specify what service to load</li>
+<li>Can pass one or multiple config files to override the default microservices settings</li>
+<li>Has usable command line options with help. (These don’t map to microservices directly, For example they can map to one or more service at once, use more specific naming, ...)</li>
+</ul>
+</div>
+<div class="section" id="samurai-build-utils">
+<h3>samurai-build-utils<a class="headerlink" href="#samurai-build-utils" title="Permalink to this headline">¶</a></h3>
+<ul class="simple">
+<li>Default gulp tasks that are usable for all microservices</li>
+<li>Only needed for development/build purposes, not during runtime</li>
+</ul>
+</div>
+<div class="section" id="samurai-utils">
+<h3>samurai-utils<a class="headerlink" href="#samurai-utils" title="Permalink to this headline">¶</a></h3>
+<ul class="simple">
+<li>Todo: Command line runner for microservices</li>
+<li>Logging utilities</li>
+<li>Help functions to supply getActions and getSchemas</li>
+</ul>
+</div>
+<div class="section" id="tachi-utils">
+<h3>tachi-utils<a class="headerlink" href="#tachi-utils" title="Permalink to this headline">¶</a></h3>
+<ul class="simple">
+<li>Utilities for multiple services</li>
+<li>Contains helper functions to create &#8216;listActions&#8217; and &#8216;getSchema&#8217;</li>
+</ul>
+</div>
+<div class="section" id="id1">
+<h3>tachi<a class="headerlink" href="#id1" title="Permalink to this headline">¶</a></h3>
+<ul class="simple">
+<li>taskrunner that loads microservices and wires them up</li>
+<li>responsible for main messagebus</li>
+</ul>
+</div>
+<div class="section" id="tachi-service-router-name">
+<h3>tachi-service-router-name<a class="headerlink" href="#tachi-service-router-name" title="Permalink to this headline">¶</a></h3>
+<ul class="simple">
+<li>split requests stream to multiple request streams based on service name</li>
+</ul>
+</div>
+<div class="section" id="tachi-service-web">
+<h3>tachi-service-web<a class="headerlink" href="#tachi-service-web" title="Permalink to this headline">¶</a></h3>
+<ul class="simple">
+<li>customer facing server component with http server (Express based)</li>
+<li>serve all dynamic http content</li>
+<li>load external middleware for static files</li>
+<li>serve websocket endpoint</li>
+<li>Todo: serve JSON RPC endpoint (implementation code can live in other package, ie graft-json)</li>
+</ul>
+</div>
+<div class="section" id="tachi-service-marvin">
+<h3>tachi-service-marvin<a class="headerlink" href="#tachi-service-marvin" title="Permalink to this headline">¶</a></h3>
+<ul class="simple">
+<li>responsible for all marvin related actions</li>
+</ul>
+</div>
+<div class="section" id="tachi-service-influx">
+<h3>tachi-service-influx<a class="headerlink" href="#tachi-service-influx" title="Permalink to this headline">¶</a></h3>
+<ul class="simple">
+<li>responsible for all influx related actions</li>
+<li>interface is functional and not directly coupled to db implementation</li>
+</ul>
+</div>
+<div class="section" id="tachi-service-spdy">
+<h3>tachi-service-spdy<a class="headerlink" href="#tachi-service-spdy" title="Permalink to this headline">¶</a></h3>
+<ul class="simple">
+<li>forward requests to other nodes</li>
+<li>receive requests from other nodes</li>
+</ul>
+</div>
+<div class="section" id="tachi-service-mongodb">
+<h3>tachi-service-mongodb<a class="headerlink" href="#tachi-service-mongodb" title="Permalink to this headline">¶</a></h3>
+<ul class="simple">
+<li>responsible for all mongodb related actions</li>
+<li>interface is functional and not directly coupled to db implementation</li>
+</ul>
+</div>
+<div class="section" id="tachi-service-user-manager">
+<h3>tachi-service-user-manager<a class="headerlink" href="#tachi-service-user-manager" title="Permalink to this headline">¶</a></h3>
+<ul class="simple">
+<li>responsible for authorisation and authentication</li>
+</ul>
+</div>
+<div class="section" id="tachi-service-translation">
+<h3>tachi-service-translation<a class="headerlink" href="#tachi-service-translation" title="Permalink to this headline">¶</a></h3>
+<ul class="simple">
+<li>responsible for translation</li>
+<li>can translate API calls and predefined JSON structures</li>
+</ul>
+</div>
+<div class="section" id="tachi-service-cache">
+<h3>tachi-service-cache<a class="headerlink" href="#tachi-service-cache" title="Permalink to this headline">¶</a></h3>
+<ul class="simple">
+<li>caches request/response combinations</li>
+<li>max cache size, expiration can be configured</li>
+</ul>
+</div>
+<div class="section" id="tachi-service-validation">
+<h3>tachi-service-validation<a class="headerlink" href="#tachi-service-validation" title="Permalink to this headline">¶</a></h3>
+<ul class="simple">
+<li>check if the request is valid JSON according to services further in the tree</li>
+<li>collecting the JSON schemas by injecting requests on the output with custom returnChannnel</li>
+</ul>
+</div>
+<div class="section" id="tsuka">
+<h3>tsuka<a class="headerlink" href="#tsuka" title="Permalink to this headline">¶</a></h3>
+<ul class="simple">
+<li>Client application (JavaScript, HTML, CSS) + Middleware</li>
+<li>Middleware for serving the static files in production mode</li>
+<li>Middleware for serving auto reload client application</li>
+<li>Gulp tasks to create dist package</li>
+</ul>
+</div>
+</div>
+</div>
+<div class="section" id="development">
+<h1>Development<a class="headerlink" href="#development" title="Permalink to this headline">¶</a></h1>
+<div class="section" id="debugging-server-side-node-js">
+<h2>Debugging server side - Node.js<a class="headerlink" href="#debugging-server-side-node-js" title="Permalink to this headline">¶</a></h2>
+<div class="section" id="webstorm-application">
+<h3>webstorm - application<a class="headerlink" href="#webstorm-application" title="Permalink to this headline">¶</a></h3>
+<p>Configuration:
+Run -&gt; Run/Debug configurations -&gt; + &#8216;Node.js Remote Debug&#8217;
+Enter a name like &#8216;NodeJsDebug&#8217;, keep host and port 127.0.0.1:5858 and apply.</p>
+<p>Starting:
+./samurai node:dev &#8211;debug or ./samurai node:dev &#8211;debug-brk</p>
+<ul class="simple">
+<li>&#8211;debug-brk will break until a debugger is connected, handy to debug startup problems</li>
+<li>&#8211;debug will open up a debugger socket, but will run without debugger</li>
+</ul>
+<p>Run -&gt; Debug... -&gt; &#8216;NodeJsDebug&#8217;</p>
+<p>Webstorm should now connect to the running instance and you are able to set breakpoints etc.</p>
+</div>
+<div class="section" id="webstorm-mocha-tests">
+<h3>webstorm - mocha tests<a class="headerlink" href="#webstorm-mocha-tests" title="Permalink to this headline">¶</a></h3>
+<p>Install mocha globally with &#8216;npm install &#8211;global mocha&#8217; and start the test with mocha &#8211;debug-brk fileToRun.spec.js. Connect with webstorm debugger.</p>
+</div>
+</div>
+<div class="section" id="debugging-client-side">
+<h2>Debugging client side<a class="headerlink" href="#debugging-client-side" title="Permalink to this headline">¶</a></h2>
+<ul class="simple">
+<li>Make sure to enable source map support in the browser options.</li>
+<li>adding &#8216;debugger;&#8217; to the source will break the browser and open up the devtools on that line</li>
+<li>A browser with the webstorm plugin is needed to debug from the Websotrm IDe (Chrome or Firefox)</li>
+</ul>
+<div class="section" id="webstorm-applicaton">
+<h3>webstorm - applicaton<a class="headerlink" href="#webstorm-applicaton" title="Permalink to this headline">¶</a></h3>
+<p>Configuration:
+Run -&gt; Run/Debug configurations -&gt; + &#8216;Javascript Debug&#8217;
+Enter a name like &#8216;BrowserDebug&#8217;
+Enter url <a class="reference external" href="http://localhost:3000">http://localhost:3000</a> to the URL input field</p>
+<p>In the table &#8216;Remote URLs of local files&#8217; add the following:</p>
+<table border="1" class="docutils">
+<colgroup>
+<col width="35%" />
+<col width="65%" />
+</colgroup>
+<thead valign="bottom">
+<tr class="row-odd"><th class="head">File/Directory</th>
+<th class="head">Remote URL</th>
+</tr>
+</thead>
+<tbody valign="top">
+<tr class="row-even"><td>tsuka/assets</td>
+<td><a class="reference external" href="http://localhost:3000">http://localhost:3000</a></td>
+</tr>
+<tr class="row-odd"><td>tsuka/client</td>
+<td><a class="reference external" href="http://localhost:3000/tsuka">http://localhost:3000/tsuka</a></td>
+</tr>
+</tbody>
+</table>
+<p>Starting:
+Run -&gt; Debug... -&gt; &#8216;BrowserDebug&#8217;
+A browser will open and the application should be loaded with debugging support. Set breakpoint from the IDE etc.</p>
+</div>
+<div class="section" id="webstorm-karma-tests">
+<h3>webstorm - karma tests<a class="headerlink" href="#webstorm-karma-tests" title="Permalink to this headline">¶</a></h3>
+<p>In a default single run the tests are run without source maps. To debug the tests first run a http server to serve the tests, ie node:dev. Start the kamra tests with karma:watch.</p>
+<p>Add a configuration in webstorm
+Run -&gt; Run/Debug configurations -&gt; + &#8216;Javascript Debug&#8217;
+Enter a name like &#8216;KarmaDebug&#8217;
+Enter url <a class="reference external" href="http://localhost:3001">http://localhost:3001</a> to the URL input field</p>
+<table border="1" class="docutils">
+<colgroup>
+<col width="35%" />
+<col width="65%" />
+</colgroup>
+<thead valign="bottom">
+<tr class="row-odd"><th class="head">File/Directory</th>
+<th class="head">Remote URL</th>
+</tr>
+</thead>
+<tbody valign="top">
+<tr class="row-even"><td>tsuka/assets</td>
+<td><a class="reference external" href="http://localhost:3001">http://localhost:3001</a></td>
+</tr>
+<tr class="row-odd"><td>tsuka/client</td>
+<td><a class="reference external" href="http://localhost:3001/tsuka">http://localhost:3001/tsuka</a></td>
+</tr>
+</tbody>
+</table>
+<p>Starting:
+Run -&gt; Debug... -&gt; &#8216;KarmaDebug&#8217;
+A browser will open and the application should be loaded with debugging support. Set breakpoint from the IDE etc.</p>
+</div>
+<div class="section" id="chrome-chromium">
+<h3>chrome - chromium<a class="headerlink" href="#chrome-chromium" title="Permalink to this headline">¶</a></h3>
+<dl class="docutils">
+<dt>If you want to edit source files directly from within chrome on disk specify the source directory in chrome</dt>
+<dd><ul class="first last simple">
+<li>Open the devtools</li>
+<li>Open the settings for the devtools</li>
+<li>Go to the workspace tab</li>
+<li>&#8220;Add folder...&#8221; and add the local &#8216;scaler_ui/modules/tsuka/client&#8217; folder</li>
+</ul>
+</dd>
+</dl>
+</div>
+<div class="section" id="css-styleguide">
+<h3>CSS - styleguide<a class="headerlink" href="#css-styleguide" title="Permalink to this headline">¶</a></h3>
+<p>To create our CSS we use the pre-processor less (<a class="reference external" href="http://lesscss.org/">http://lesscss.org/</a>). To make our code consisted we use the following rules:</p>
+<blockquote>
+<div><ul class="simple">
+<li>we use &#8220;border-sizing: border-box;&#8221; on every element, this is already placed in the general file</li>
+<li>we use flexbox instead of floats</li>
+<li>class naming: no camelCase, but lowercase in combination with_underscores, except for classes from external libraries</li>
+<li>we don&#8217;t use a pre-defined architecture methodology for our selectors, we go by common sense: not every class above the element should be listed, and not only the last class should be used</li>
+<li>directives css should be scoped: by using the name of the directive, we make sure we don&#8217;t change the css of other components</li>
+<li>we prefer classes over ID&#8217;s. ID&#8217;s can only be used in the chrome component, forms and javascript generated id&#8217;s.</li>
+<li>colors shouldn&#8217;t be defined in the page/element/... css file, but belong in an overarching file knows as constants</li>
+</ul>
+</div></blockquote>
+</div>
+<div class="section" id="id2">
+<h3>Tsuka<a class="headerlink" href="#id2" title="Permalink to this headline">¶</a></h3>
+<ul class="simple">
+<li>Webpack</li>
+</ul>
+<p>This technology enables us to split the codebase into multiple chunks, so that these can be loaded on demand, reducing the loading time of our application. It takes care of concatenation and bundeling, and helps to manage and bundle other third party library dependencies. Because of webpack, we are able to write the code in a logical structure, and use Node.js module style for client side code.</p>
+<p>Webpack also makes it possible to track dependencies at the place they are created, and handles the creation of shared dependencies between pages. Based upon the dependencies needed for a specific page, it will load the needed dependencies only once. Extra dependencies for a new page will be lazy loaded when visiting a new page. The created bundle of shared code (required by multiple pages) can be tweaked by changing the webpack config without the need to change the code structure.</p>
+<ul class="simple">
+<li>Unit tests</li>
+</ul>
+<p>When writing unit test, preferably write code that doesn&#8217;t depend on the browser environment, this makes it easier to re-use and maintain code. An advantage of unit tests that don&#8217;t depend on the browser is that these can be run with mocha, which is easier, and faster to test.
+Files ending on .spec.js are automatically run with mocha, those ending on .webspec.js are run by karma. The coverage report is merged from both unit test tools.</p>
+<ul class="simple">
+<li>AngularJS</li>
+</ul>
+<p>Angular offers an interface to create directives, services and factories but doesn&#8217;t handle code dependencies. We use our own utility functions on top of the Angular functions. These custom utils functions makes it possible to automatically load and register the needed Angular dependencies. They are also linking the Angular units to webpack units, and keeps us less dependant on the AngularJS interface.</p>
+<p>Angular is actually mainly used to create re-usable components (directives), modules (providers) and views (controllers). The ui-router takes care of creating the states and handling URL&#8217;s, whilst the actual states are rendered from a data structure that provides the needed URL&#8217;s and views.</p>
+</div>
+<div class="section" id="setup-influxdb">
+<h3>Setup InfluxDB<a class="headerlink" href="#setup-influxdb" title="Permalink to this headline">¶</a></h3>
+<p>Install InfluxDB locally (depending on operating system: follow site instructions or use a package manager like Homewbrew)
+Or on a virtual machine (VirtualBox, Vagrant... recommended box: Ubuntu Trusty 64) and use port forwarding to your host machine (8086 and 8083)</p>
+<p>Install python &amp; pip on your development machine or use a VM</p>
+<p>Install python dependencies for marvin lib (on Ubuntu:)
+* sudo apt-get update
+* sudo apt-get install python-virtualenv python-dev libssl-dev libffi-dev</p>
+<p>Create/go to a folder to setup a Python virtual environment:
+* virtualenv venv</p>
+<p>Activate the venv:
+* source venv/bin/activate</p>
+<p>Install Marvin libs:
+* pip install -i <a class="reference external" href="http://pypi.amplidata.com/ampli/dev/">http://pypi.amplidata.com/ampli/dev/</a> marvin-libs</p>
+<p>The yaml dependency might be necessary to install while in venv to run the populate script:
+* pip install pyyaml</p>
+<p>Get the populate script &amp; json file and put both in a folder <a class="reference external" href="https://support.amplidata.com/browse/MAR-1107?jql=text%20~%20%22influx%20populate%22">https://support.amplidata.com/browse/MAR-1107?jql=text%20~%20%22influx%20populate%22</a>
+If you&#8217;re running a VM such as Vagrant, place the populate script on your guest VM and change the parameters to your host machine&#8217;s IP</p>
+<p>Run the populate script (while still in venv mode):
+* python populate_influxdb.py</p>
+<p>To leave the virtualenv:
+* deactivate</p>
+</div>
+</div>
+</div>
+
+
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper">
+  <h3><a href="#">Table Of Contents</a></h3>
+  <ul>
+<li><a class="reference internal" href="#">Welcome to Samurai&#8217;s documentation!</a></li>
+<li><a class="reference internal" href="#indices-and-tables">Indices and tables</a></li>
+<li><a class="reference internal" href="#services">Services</a><ul>
+<li><a class="reference internal" href="#tachi">Tachi</a></li>
+<li><a class="reference internal" href="#configure-service-flow">Configure service flow</a></li>
+<li><a class="reference internal" href="#client-side-api">Client side API</a></li>
+<li><a class="reference internal" href="#microservice-interface">Microservice interface</a></li>
+<li><a class="reference internal" href="#filter-services">Filter services</a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#directory-structure">Directory structure</a></li>
+<li><a class="reference internal" href="#installation">Installation</a></li>
+<li><a class="reference internal" href="#gulp-tasks">Gulp tasks</a></li>
+<li><a class="reference internal" href="#packages">Packages</a><ul>
+<li><a class="reference internal" href="#naming-conventions">Naming conventions</a></li>
+<li><a class="reference internal" href="#package-list-and-responsibilities">Package list and responsibilities</a><ul>
+<li><a class="reference internal" href="#samurai">samurai</a></li>
+<li><a class="reference internal" href="#samurai-build-utils">samurai-build-utils</a></li>
+<li><a class="reference internal" href="#samurai-utils">samurai-utils</a></li>
+<li><a class="reference internal" href="#tachi-utils">tachi-utils</a></li>
+<li><a class="reference internal" href="#id1">tachi</a></li>
+<li><a class="reference internal" href="#tachi-service-router-name">tachi-service-router-name</a></li>
+<li><a class="reference internal" href="#tachi-service-web">tachi-service-web</a></li>
+<li><a class="reference internal" href="#tachi-service-marvin">tachi-service-marvin</a></li>
+<li><a class="reference internal" href="#tachi-service-influx">tachi-service-influx</a></li>
+<li><a class="reference internal" href="#tachi-service-spdy">tachi-service-spdy</a></li>
+<li><a class="reference internal" href="#tachi-service-mongodb">tachi-service-mongodb</a></li>
+<li><a class="reference internal" href="#tachi-service-user-manager">tachi-service-user-manager</a></li>
+<li><a class="reference internal" href="#tachi-service-translation">tachi-service-translation</a></li>
+<li><a class="reference internal" href="#tachi-service-cache">tachi-service-cache</a></li>
+<li><a class="reference internal" href="#tachi-service-validation">tachi-service-validation</a></li>
+<li><a class="reference internal" href="#tsuka">tsuka</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li><a class="reference internal" href="#development">Development</a><ul>
+<li><a class="reference internal" href="#debugging-server-side-node-js">Debugging server side - Node.js</a><ul>
+<li><a class="reference internal" href="#webstorm-application">webstorm - application</a></li>
+<li><a class="reference internal" href="#webstorm-mocha-tests">webstorm - mocha tests</a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#debugging-client-side">Debugging client side</a><ul>
+<li><a class="reference internal" href="#webstorm-applicaton">webstorm - applicaton</a></li>
+<li><a class="reference internal" href="#webstorm-karma-tests">webstorm - karma tests</a></li>
+<li><a class="reference internal" href="#chrome-chromium">chrome - chromium</a></li>
+<li><a class="reference internal" href="#css-styleguide">CSS - styleguide</a></li>
+<li><a class="reference internal" href="#id2">Tsuka</a></li>
+<li><a class="reference internal" href="#setup-influxdb">Setup InfluxDB</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+  <div role="note" aria-label="source link">
+    <h3>This Page</h3>
+    <ul class="this-page-menu">
+      <li><a href="_sources/index.txt"
+            rel="nofollow">Show Source</a></li>
+    </ul>
+   </div>
+<div id="searchbox" style="display: none" role="search">
+  <h3>Quick search</h3>
+    <form class="search" action="search.html" method="get">
+      <input type="text" name="q" />
+      <input type="submit" value="Go" />
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+    <p class="searchtip" style="font-size: 90%">
+    Enter search terms or a module, class or function name.
+    </p>
+</div>
+<script type="text/javascript">$('#searchbox').show(0);</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="related" role="navigation" aria-label="related navigation">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="genindex.html" title="General Index"
+             >index</a></li>
+        <li class="nav-item nav-item-0"><a href="#">Samurai .0 documentation</a> &raquo;</li> 
+      </ul>
+    </div>
+    <div class="footer" role="contentinfo">
+        &copy; Copyright 2014, Amplidata.
+      Created using <a href="http://sphinx-doc.org/">Sphinx</a> 1.3.1.
+    </div>
+  </body>
+</html>

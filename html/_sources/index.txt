@@ -1,0 +1,515 @@
+Welcome to Samurai's documentation!
+===================================
+
+Contents:
+
+.. toctree::
+:maxdepth:2
+
+
+
+Indices and tables
+==================
+
+* :ref:`genindex`
+* :ref:`modindex`
+* :ref:`search`
+
+Services
+========
+
+Purpose is to divide functionality in small blocks that are usable/testable on their own. The functionality is provided on JSON stream.
+
+There are four functionalities a service can provide:
+
+* Sources
+    * Creates requests
+    * Typical server listen socket
+    * Examples: SPDY, REST, socketIO, graftIO, ….
+* Filters
+    * Filters requests
+    * Typical blocking or editing some requests
+    * Can edit returnChannel by adding a filter on the returnChannel
+    * Examples: Login, JsonValidator, Authorisation, Caching, …
+* Targets
+    * Service that will not pass the same request further and will create a response on the returnChannel
+    * Gives responses to requests
+    * Can create requests to other services to be able to answer to a request
+    * Examples: Marvin, InfluxDB, PerconaDB, SPDY…
+* Routers
+    * Split request channel to multiple request channels
+    * Can decide own rules to split the messages: randomize, regexp, service name, system load etc.
+
+
+One microservice can handle more than 1 functionality
+    * SPDY server can be both a source and a target
+    * Validator can forward some messages as a filter, and can act as a target when an invalid message is coming in
+
+There is no strict seperation between the functionalities a service can provide. One service instance can do as many things as he feels responsible for. As the intention is to seperate functionality in reusable small and replaceble parts they shouldn't. In practice one service should try to do only 1 functionality.
+
+
+Tachi
+-----
+
+Tachi is dumb and doesn't like any responsibility. Each functionlity should be provided in a seperate 'service'.
+
+Tachi glues microservices together to form an application. The messageflow can be configured by editing the main config file and should allow the routing of messages to the services that have the answers.
+
+The configuration is describing a message flow in the form of a tree structure. There is an inital config needed for startup, but this can be changed at runtime.
+
+The routing is based only on the request messages. The responses go trough a seperate channel. The creator of the request has to provide a returnChannel. This is a stream where the requester will listen for response(s). Each component that handles the request as a filter can replace the returnChannel by adding a transform stream to edit the response before it is handled back to the requester.
+In this way the response return path is determined by the request path and no further routing configuration is needed.
+
+This messageflow and routing now happens within 1 node process. The concept keeps pretending that services are communicationg over a network even when they aren't. When not communicating over the network a memory session is used. This makes it possible to scale to different nodes later on without changing the interfaces between components. A link to a remote machine is just a service as any other.
+
+Tachi takes the task to link the services and routers, but in a dumb way without any logic. The configuration and flow of services is configured within the configuration file from samurai and passed to Tashi. Tachi follows this metadata information to creates the application. Internally components are using the target name to address requests. This is done by using the field 'service' in the top level request message. The target name will not be called directly, it will just follow the configured message flow.
+
+Note that all services can edit the output by adding a filter stream on the returnChannel. Not only the 'end' service that doesn't forward the request further can edit the response.
+
+* Terms
+    * Modulename = name as mentioned in package.json, versioning handled by NPM. Code that can create a 'service'
+    * Interface = Set of JSON schemas describing a functionality set. Sometimes referred to as a 'service'
+    * Instancename = Instance of module with a given name for identification. Sometimes implementing an Interface
+    * targetInstance = String that describes the instancename that will handle the dependent requests. On module level this will be the stream itself. Tachi will replace the name of the bus by the actual bus.
+    * Bus = communicationChannel that is shared between all instances that use the same targetInstance
+
+Tachi will handle routing internally on instancenames / bus. Routers can use the busnames to handle routing at runtime. Static code should only rely on service names or other fields in the request message.
+
+
+Configure service flow
+----------------------
+
+Instances from microservices and their settings can be managed by passing a config object to Tashi. Tashi will initiate the different services and configure them.
+
+This can be initiated by Tachi on startup. During runtime all services can be reconfigured / paused / stopped by sending messages to Tachi.
+
+Tachi supports the following actions: configure - pause - stop - listBusTree
+
+The chain or tree should be kept as easy and parallell as possible. Try to keep most of the service workers parallel after 1 router. This can be done by using 1 main 'router' that will handle the most common requests types. For example these router can handle messages that promise that they will
+    * Plain JSON
+    * Authorized, having enough permissions to make that request
+    * Validated
+    * ...
+
+
+Client side API
+---------------
+
+Todo: refactor text
+The customer facing API should expose 1 single service. This service will be a routing hub that resolves requests by passing them to other microservices. This is done to not bother the client with the actual service that is implementing the action in the request. In this way the server components can be reorganised without changing the client API.
+
+Microservice interface
+----------------------
+
+Each microservice should provide a JSON schema that is needed to setup the service and provide it on the 'configSchema' property. If no config is needed the configSchema property is not needed.
+
+Each microservice should provide a 'create' function that takes the specified config as parameter. The microservice can pretend that the config is valid an has all required fields. Fields that supply a default value will contain the default value when no specific value was requested by the creator.
+The return value should be Promise that indicates the error if the creation of the service failed. If the creation has succeeded the promise should be accepted with an object representing the service. This object can contain a 'stop' function to provide cleanup routines. If the instance provides a 'stop' function it should return a Promise that indicates when the service is done with cleaning up the resources.
+
+The instance can provide the input request stream on the property 'input' if the service can handle requests.
+
+The instance can provide the output request streams on the property 'output'. This can be a single stream or an array of streams.
+
+If the service provides an Interface it should document it by providing the matching JSON schemas. If the service depends on a Interface further in the tree it should forward the 'listActions' and 'getJsonSchema' actions. If the service edits the Interface from a service further in the three it should edit the schemas accordingly.
+
+* List of supported action names and the corresponding JSON templates that describe the payload of these messages. There should be a schema for both the request and the answer.
+    * { action: 'listActions' }, retreive a list of actions the service supports
+    * { action: 'getJsonSchema', payload: { action: 'LookupUser'} }, retreive the schema that defines the request interface for a specific action. This can indicate default values, and should indicate what options are mandatory. This will return a schema for both the request and the expected answer.
+
+* Each microservice should support gulp and implement at least these functionalities:
+    * Eslint / Jshint
+    * Mocha
+    * Nodemon, running the main entry point and watching files. Supports debugging and auto restart.
+    * Optional: tasks specific to the microservice
+
+    The package samura-build-utils has shared code to share gulp task configurations.
+
+
+Filter services
+---------------
+
+Filter services can help a lot in offloading responsibility from services. In this way the functionality can be reused by different service without making it mandatory.
+
+There are some utility stream helpers that are strongly suggested to use on any microservice. In development and testing environments or for specific use cases these utility functions can be left out of the message chain.
+
+For all services:
+    * Validation service
+        * Will only pass the validated request further in the chain. Will reject other requests and answer on the returnChannel with the validation error.
+
+
+For services that are generating client request:
+    * Authorisation service
+        * Add user information to the request
+    * Translation service
+        * Translate text that is meant to serve to the user
+
+
+Directory structure
+===================
+
+Samurai top level
+    * docs
+        sphinx documentation that applies to all packages and javascript coding for Amplidata
+    * environment
+        development and runtime dependencies install scripts
+    * gulp
+        tasks to execute on all packages at once
+    * modules
+        the actual source packages
+        * docs
+            Non trivial packages should have their own sphinx docs
+        * gulp
+            local gulp tasks
+        * packaging
+            only for npm packages that become a .deb package for deployment
+        * Extra directories
+            As needed for the specific component
+
+
+Installation
+============
+
+First install the dependencies by running
+
+.. code-block:: bash
+
+    ./environment/install.sh
+
+For development
+
+.. code-block:: bash
+    ./samurai dev
+
+
+The samurai top level script supports the folowing arguments:
+
+* dev
+    Install all dependencies for development environment (linked local modules)
+    Alias for init + npm uninstall + npm link + npm install
+* jenkins
+    reinstall dependencies, run linting, tests and create a build.
+
+Gulp commands can be run from this script directly:
+* [gulpCommand]
+    Run global gulp command
+    jshint - node:dev - node:prod - build - ...
+    see gulp tasks section below for all available tasks
+* modules/[modulename] [gulpCommand]
+    Same result as cd modules/[modulename] gulp [gulpCommand]
+    see gulp tasks section below for all available tasks
+
+
+Samurai top level script support also folowing arguments. All these tasks can be executed by using a group/alias command from above. To speed up things if you now what is needed you can call a subtask directly.
+* init
+    Install dependencies for top level gulp commands
+* npm link
+    Resolve all local dependencies with symbolic links.  This is the recommended way for developing. In this way all 'latest' and local sources are used instead of of the fixed version that is provided in the package.json file
+* npm install
+    Run npm install in all modules
+* npm uninstall
+    Undo npm install, remove node_modules folders in all modules
+* npm dev
+    Alias for npm shrinkwrapfix + npm uninstall + npm link + npm install in one run
+* npm shrinkwrapfix
+    Remove inconsistent shrinkwrap data https://github.com/npm/npm/issues/3581
+
+Gulp tasks
+==========
+
+* test
+    * Run the tests and generate reports in a single run. Process return code should indicate success or failure. This starts karma and mocha tests. There is no external command needed, karma is starting subset server to serve the client side javascript.
+* test:watch
+    * continous run all automatic code checks on each file change. Leave process running on failures. This starts karma and mocha tests. There should be a server running serving the client app on port 3001.
+* lint
+    * Run the linting tools eslint and jshint in single run. Process return code should indicate success or failure.
+* lint:watch
+    * continous run all code linting on each file change. Leave process running on failures.
+* build
+    * lint and test the source and if tests are successfull build a dist build. Process return code should indicate success or failure.
+* serve
+    * run a development server with autoreload and run the tests on each file change. Serve the client application directly from source. This also starts the dist server on another port.
+* serve:dist
+    * run a auto restarting server in production mode and serving the client application from builded output. This doesn't start the development server.
+
+
+Subtasks
+    * jshint
+    * jshint:watch
+    * eslint
+    * eslint:watch
+    * webpack
+    * node:dev
+    * node:prod
+    * karma
+    * karma:watch
+        note: node:dev should be running to serve the js files.
+    * istanbul
+    * istanbul:watch
+
+
+Packages
+========
+
+Purpose is to divide the code in different node packages.
+    * To make sure dependencies are managed for each microservice independently
+    * Makes it possible to replace services and move components to different repositories when needed
+    * Being sure components can live on their own for deployment and testing
+    * It forces the developers to to think about dependencies between internal components
+    * Possible to manage the subcomponents and microservices on a local npm repository (also for components that live in the same git repository)
+
+Naming conventions
+------------------
+
+Package names indicate the scope and intended usage.
+
+    * samurai- prefix indicates that the code is usable for both tachi and tsuka. This can be for development puproses (ex. gulp helpers) or runtime (ex. logic and data structures, graft pipes, …)
+    * tachi- prefix indicates that the code is specific to the server side
+        If the package implements the service interface ‘tachi-service-’ should be used as prefix.
+    * tsuka- prefix indicates that the code is specific to the client side
+
+Package list and responsibilities
+---------------------------------
+
+samurai
+~~~~~~~
+* Main command line application
+* Has Tsuka and Tashi as package.json dependencies
+* Has microservices code as dependency in package.json
+* Has a config file service.json to specify what service to load
+* Can pass one or multiple config files to override the default microservices settings
+* Has usable command line options with help. (These don’t map to microservices directly, For example they can map to one or more service at once, use more specific naming, ...)
+
+samurai-build-utils
+~~~~~~~~~~~~~~~~~~~
+* Default gulp tasks that are usable for all microservices
+* Only needed for development/build purposes, not during runtime
+
+samurai-utils
+~~~~~~~~~~~~~
+* Todo: Command line runner for microservices
+* Logging utilities
+* Help functions to supply getActions and getSchemas
+
+tachi-utils
+~~~~~~~~~~~
+* Utilities for multiple services
+* Contains helper functions to create 'listActions' and 'getSchema'
+
+tachi
+~~~~~
+* taskrunner that loads microservices and wires them up
+* responsible for main messagebus
+
+tachi-service-router-name
+~~~~~~~~~~~~~~~~~~~~~~~~~
+* split requests stream to multiple request streams based on service name
+
+tachi-service-web
+~~~~~~~~~~~~~~~~~
+* customer facing server component with http server (Express based)
+* serve all dynamic http content
+* load external middleware for static files
+* serve websocket endpoint
+* Todo: serve JSON RPC endpoint (implementation code can live in other package, ie graft-json)
+
+tachi-service-marvin
+~~~~~~~~~~~~~~~~~~~~
+* responsible for all marvin related actions
+
+tachi-service-influx
+~~~~~~~~~~~~~~~~~~~~~~~~~
+* responsible for all influx related actions
+* interface is functional and not directly coupled to db implementation
+
+tachi-service-spdy
+~~~~~~~~~~~~~~~~~~
+* forward requests to other nodes
+* receive requests from other nodes
+
+tachi-service-mongodb
+~~~~~~~~~~~~~~~~~~~~~
+* responsible for all mongodb related actions
+* interface is functional and not directly coupled to db implementation
+
+tachi-service-user-manager
+~~~~~~~~~~~~~~~~~~~~~~~~~~
+* responsible for authorisation and authentication
+
+tachi-service-translation
+~~~~~~~~~~~~~~~~~~~~~~~~~
+* responsible for translation
+* can translate API calls and predefined JSON structures
+
+tachi-service-cache
+~~~~~~~~~~~~~~~~~~~
+* caches request/response combinations
+* max cache size, expiration can be configured
+
+tachi-service-validation
+~~~~~~~~~~~~~~~~~~~~~~~~
+* check if the request is valid JSON according to services further in the tree
+* collecting the JSON schemas by injecting requests on the output with custom returnChannnel
+
+tsuka
+~~~~~
+* Client application (JavaScript, HTML, CSS) + Middleware
+* Middleware for serving the static files in production mode
+* Middleware for serving auto reload client application
+* Gulp tasks to create dist package
+
+
+
+Development
+===========
+
+Debugging server side - Node.js
+-------------------------------
+
+webstorm - application
+~~~~~~~~~~~~~~~~~~~~~~
+
+Configuration:
+Run -> Run/Debug configurations -> + 'Node.js Remote Debug'
+Enter a name like 'NodeJsDebug', keep host and port 127.0.0.1:5858 and apply.
+
+Starting:
+./samurai node:dev --debug or ./samurai node:dev --debug-brk
+
+* --debug-brk will break until a debugger is connected, handy to debug startup problems
+* --debug will open up a debugger socket, but will run without debugger
+
+Run -> Debug... -> 'NodeJsDebug'
+
+Webstorm should now connect to the running instance and you are able to set breakpoints etc.
+
+
+webstorm - mocha tests
+~~~~~~~~~~~~~~~~~~~~~~
+Install mocha globally with 'npm install --global mocha' and start the test with mocha --debug-brk fileToRun.spec.js. Connect with webstorm debugger.
+
+
+Debugging client side
+---------------------
+
+* Make sure to enable source map support in the browser options.
+* adding 'debugger;' to the source will break the browser and open up the devtools on that line
+* A browser with the webstorm plugin is needed to debug from the Websotrm IDe (Chrome or Firefox)
+
+webstorm - applicaton
+~~~~~~~~~~~~~~~~~~~~~
+Configuration:
+Run -> Run/Debug configurations -> + 'Javascript Debug'
+Enter a name like 'BrowserDebug'
+Enter url http://localhost:3000 to the URL input field
+
+In the table 'Remote URLs of local files' add the following:
+
++----------------+------------------------------+
+| File/Directory | Remote URL                   |
++================+==============================+
+| tsuka/assets   |  http://localhost:3000       |
++----------------+------------------------------+
+| tsuka/client   |  http://localhost:3000/tsuka |
++----------------+------------------------------+
+
+Starting:
+Run -> Debug... -> 'BrowserDebug'
+A browser will open and the application should be loaded with debugging support. Set breakpoint from the IDE etc.
+
+
+webstorm - karma tests
+~~~~~~~~~~~~~~~~~~~~~~
+In a default single run the tests are run without source maps. To debug the tests first run a http server to serve the tests, ie node:dev. Start the kamra tests with karma:watch.
+
+Add a configuration in webstorm
+Run -> Run/Debug configurations -> + 'Javascript Debug'
+Enter a name like 'KarmaDebug'
+Enter url http://localhost:3001 to the URL input field
+
++----------------+------------------------------+
+| File/Directory | Remote URL                   |
++================+==============================+
+| tsuka/assets   |  http://localhost:3001       |
++----------------+------------------------------+
+| tsuka/client   |  http://localhost:3001/tsuka |
++----------------+------------------------------+
+
+Starting:
+Run -> Debug... -> 'KarmaDebug'
+A browser will open and the application should be loaded with debugging support. Set breakpoint from the IDE etc.
+
+
+chrome - chromium
+~~~~~~~~~~~~~~~~~
+
+If you want to edit source files directly from within chrome on disk specify the source directory in chrome
+ * Open the devtools
+ * Open the settings for the devtools
+ * Go to the workspace tab
+ * "Add folder..." and add the local 'scaler_ui/modules/tsuka/client' folder
+
+
+
+CSS - styleguide
+~~~~~~~~~~~~~~~~
+To create our CSS we use the pre-processor less (http://lesscss.org/). To make our code consisted we use the following rules:
+
+ * we use "border-sizing: border-box;" on every element, this is already placed in the general file
+ * we use flexbox instead of floats
+ * class naming: no camelCase, but lowercase in combination with_underscores, except for classes from external libraries
+ * we don't use a pre-defined architecture methodology for our selectors, we go by common sense: not every class above the element should be listed, and not only the last class should be used
+ * directives css should be scoped: by using the name of the directive, we make sure we don't change the css of other components
+ * we prefer classes over ID's. ID's can only be used in the chrome component, forms and javascript generated id's.
+ * colors shouldn't be defined in the page/element/... css file, but belong in an overarching file knows as constants
+
+
+Tsuka
+~~~~~
+
+* Webpack
+This technology enables us to split the codebase into multiple chunks, so that these can be loaded on demand, reducing the loading time of our application. It takes care of concatenation and bundeling, and helps to manage and bundle other third party library dependencies. Because of webpack, we are able to write the code in a logical structure, and use Node.js module style for client side code.
+
+Webpack also makes it possible to track dependencies at the place they are created, and handles the creation of shared dependencies between pages. Based upon the dependencies needed for a specific page, it will load the needed dependencies only once. Extra dependencies for a new page will be lazy loaded when visiting a new page. The created bundle of shared code (required by multiple pages) can be tweaked by changing the webpack config without the need to change the code structure.
+
+* Unit tests
+When writing unit test, preferably write code that doesn't depend on the browser environment, this makes it easier to re-use and maintain code. An advantage of unit tests that don't depend on the browser is that these can be run with mocha, which is easier, and faster to test.
+Files ending on .spec.js are automatically run with mocha, those ending on .webspec.js are run by karma. The coverage report is merged from both unit test tools.
+
+* AngularJS
+Angular offers an interface to create directives, services and factories but doesn't handle code dependencies. We use our own utility functions on top of the Angular functions. These custom utils functions makes it possible to automatically load and register the needed Angular dependencies. They are also linking the Angular units to webpack units, and keeps us less dependant on the AngularJS interface.
+
+Angular is actually mainly used to create re-usable components (directives), modules (providers) and views (controllers). The ui-router takes care of creating the states and handling URL's, whilst the actual states are rendered from a data structure that provides the needed URL's and views.
+
+
+Setup InfluxDB
+~~~~~~~~~~~~~~
+
+Install InfluxDB locally (depending on operating system: follow site instructions or use a package manager like Homewbrew)
+Or on a virtual machine (VirtualBox, Vagrant... recommended box: Ubuntu Trusty 64) and use port forwarding to your host machine (8086 and 8083)
+
+Install python & pip on your development machine or use a VM
+
+Install python dependencies for marvin lib (on Ubuntu:)
+* sudo apt-get update
+* sudo apt-get install python-virtualenv python-dev libssl-dev libffi-dev
+
+Create/go to a folder to setup a Python virtual environment:
+* virtualenv venv
+
+Activate the venv:
+* source venv/bin/activate
+
+Install Marvin libs:
+* pip install -i http://pypi.amplidata.com/ampli/dev/ marvin-libs
+
+The yaml dependency might be necessary to install while in venv to run the populate script:
+* pip install pyyaml
+
+Get the populate script & json file and put both in a folder https://support.amplidata.com/browse/MAR-1107?jql=text%20~%20%22influx%20populate%22
+If you're running a VM such as Vagrant, place the populate script on your guest VM and change the parameters to your host machine's IP
+
+Run the populate script (while still in venv mode):
+* python populate_influxdb.py
+
+To leave the virtualenv:
+* deactivate
